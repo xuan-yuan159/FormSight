@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
-import { ExternalLink, ScanSearch, Settings2, Sparkles, ToggleRight } from '@lucide/vue';
+import { ExternalLink, ScanSearch, Settings2, ToggleRight } from '@lucide/vue';
 import { browser } from 'wxt/browser';
 import { getSettings, saveSettings } from '../../src/shared/storage';
 import type { UserSettings } from '../../src/shared/types';
@@ -8,6 +8,7 @@ import type { UserSettings } from '../../src/shared/types';
 const settings = ref<UserSettings | null>(null);
 const activeTab = ref('');
 const notice = ref('');
+const brandIconUrl = browser.runtime.getURL('icons/icon-48.png'); // 使用扩展资源中的品牌图标
 
 /**
  * 加载弹窗中的当前设置和活动标签页。
@@ -60,7 +61,9 @@ onMounted(loadPopup);
   <main class="popup-shell">
     <header class="popup-header">
       <div class="popup-brand">
-        <span><Sparkles :size="17" /></span>
+        <span class="popup-brand-mark">
+          <img :src="brandIconUrl" width="28" height="28" alt="一问成卷品牌图标" />
+        </span>
         <div>
           <strong>一问成卷</strong>
           <small>AI 问卷辅助填写</small>
@@ -156,6 +159,12 @@ button {
   border-radius: 7px;
   background: #e6f3f1;
   color: #0f766e;
+}
+
+.popup-brand-mark img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain; /* 保持品牌图形比例 */
 }
 
 .popup-brand strong,

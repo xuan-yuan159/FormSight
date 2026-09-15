@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import {
-  Bot,
   Check,
   CircleAlert,
   ClipboardCheck,
@@ -51,6 +50,7 @@ const showFieldDetails = ref(false);
 const expandedFieldIds = ref<Record<string, boolean>>({});
 const showAllAnswers = ref(false);
 const conversationRound = ref(0);
+const brandIconUrl = browser.runtime.getURL('icons/icon-48.png'); // 使用扩展资源中的品牌图标
 
 const modeOptions: Array<{ value: InquiryMode; label: string; description: string }> = [
   { value: 'casual', label: '敷衍', description: '不询问，直接生成合理答案' }, // 敷衍模式一次性完成
@@ -938,14 +938,16 @@ onUnmounted(unbindStreamListener);
 <template>
   <div class="aq-shell">
     <button v-if="!isOpen" class="aq-launcher" type="button" title="打开一问成卷" @click="isOpen = true">
-      <Sparkles :size="21" />
+      <img class="aq-launcher-image" :src="brandIconUrl" width="32" height="32" alt="一问成卷品牌图标" />
       <span class="aq-launcher-dot"></span>
     </button>
 
     <section v-else class="aq-panel" aria-label="一问成卷浮窗">
       <header class="aq-header">
         <div class="aq-brand">
-          <span class="aq-brand-mark"><Bot :size="17" /></span>
+          <span class="aq-brand-mark">
+            <img :src="brandIconUrl" width="28" height="28" alt="一问成卷品牌图标" />
+          </span>
           <div>
             <strong>一问成卷</strong>
             <small>AI 问卷辅助填写</small>
@@ -1139,6 +1141,15 @@ textarea {
   box-shadow: 0 10px 26px rgb(15 118 110 / 24%);
 }
 
+.aq-launcher-image {
+  width: 32px;
+  height: 32px;
+  padding: 2px;
+  border-radius: 50%;
+  background: #fff;
+  object-fit: contain; /* 让品牌图形在浮窗启动按钮中清晰显示 */
+}
+
 .aq-launcher:hover {
   background: #115e59;
 }
@@ -1204,6 +1215,12 @@ textarea {
   border-radius: 7px;
   background: #e6f3f1;
   color: #0f766e;
+}
+
+.aq-brand-mark img {
+  width: 21px;
+  height: 21px;
+  object-fit: contain; /* 保持品牌图形比例 */
 }
 
 .aq-brand strong,

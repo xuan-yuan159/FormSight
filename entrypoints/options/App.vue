@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { Check, KeyRound, Save, Send, ShieldCheck, Sparkles, Trash2 } from '@lucide/vue';
+import { Check, KeyRound, Save, Send, ShieldCheck, Trash2 } from '@lucide/vue';
 import { browser } from 'wxt/browser';
 import { DEFAULT_SETTINGS, INQUIRY_MODE_DESCRIPTIONS, INQUIRY_MODE_LABELS } from '../../src/shared/constants';
 import { normalizeAIConfig } from '../../src/shared/prompts';
@@ -12,6 +12,7 @@ const statusMessage = ref('');
 const statusType = ref<'idle' | 'success' | 'error'>('idle');
 const testing = ref(false);
 const saved = ref(false);
+const brandIconUrl = browser.runtime.getURL('icons/icon-48.png'); // 使用扩展资源中的品牌图标
 
 const modeOptions: InquiryMode[] = ['casual', 'normal', 'serious']; // 设置页只保留三种询问模式
 
@@ -92,7 +93,9 @@ onMounted(loadSettings);
   <main class="options-page">
     <header class="page-header">
       <div class="page-title">
-        <span class="title-icon"><Sparkles :size="21" /></span>
+        <span class="title-icon">
+          <img :src="brandIconUrl" width="40" height="40" alt="一问成卷品牌图标" />
+        </span>
         <div>
           <h1>一问成卷 <span>FormSight</span></h1>
           <p>Edge 浏览器问卷辅助填写工具</p>
@@ -266,6 +269,12 @@ select {
   border-radius: 9px;
   background: #dff1ee;
   color: #0f766e;
+}
+
+.title-icon img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain; /* 保持品牌图形比例 */
 }
 
 h1,
