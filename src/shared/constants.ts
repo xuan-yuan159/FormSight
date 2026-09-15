@@ -2,7 +2,7 @@ import type { AIConfig, InquiryMode, UserSettings } from './types';
 
 export const SETTINGS_KEY = 'aq-user-settings'; // 用户配置存储键
 export const SESSION_KEY = 'aq-current-session'; // 临时问卷会话存储键
-export const FLOATING_HOST_ID = 'auto-questionnaire-floating-host'; // 页面浮窗宿主节点 ID
+export const FLOATING_HOST_ID = 'formsight-floating-host'; // 页面浮窗宿主节点 ID
 
 export const DEFAULT_AI_CONFIG: AIConfig = {
   baseURL: 'https://api.deepseek.com/v1', // 默认使用 OpenAI 兼容接口地址

@@ -212,7 +212,7 @@ export function buildCompletionPrompt(
 export function buildTestPrompt(): { systemPrompt: string; userPrompt: string } {
   return {
     systemPrompt: '你是一个接口连通性测试助手。只返回 JSON。',
-    userPrompt: JSON.stringify({ ok: true, message: 'Auto Questionnaire connection test' }),
+    userPrompt: JSON.stringify({ ok: true, message: 'FormSight connection test' }),
   };
 }
 

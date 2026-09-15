@@ -937,17 +937,17 @@ onUnmounted(unbindStreamListener);
 
 <template>
   <div class="aq-shell">
-    <button v-if="!isOpen" class="aq-launcher" type="button" title="打开 Auto Questionnaire" @click="isOpen = true">
+    <button v-if="!isOpen" class="aq-launcher" type="button" title="打开一问成卷" @click="isOpen = true">
       <Sparkles :size="21" />
       <span class="aq-launcher-dot"></span>
     </button>
 
-    <section v-else class="aq-panel" aria-label="Auto Questionnaire 浮窗">
+    <section v-else class="aq-panel" aria-label="一问成卷浮窗">
       <header class="aq-header">
         <div class="aq-brand">
           <span class="aq-brand-mark"><Bot :size="17" /></span>
           <div>
-            <strong>Auto Questionnaire</strong>
+            <strong>一问成卷</strong>
             <small>AI 问卷辅助填写</small>
           </div>
         </div>

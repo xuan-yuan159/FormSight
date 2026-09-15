@@ -94,7 +94,7 @@ onMounted(loadSettings);
       <div class="page-title">
         <span class="title-icon"><Sparkles :size="21" /></span>
         <div>
-          <h1>Auto Questionnaire</h1>
+          <h1>一问成卷 <span>FormSight</span></h1>
           <p>Edge 浏览器问卷辅助填写工具</p>
         </div>
       </div>

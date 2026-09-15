@@ -62,7 +62,7 @@ onMounted(loadPopup);
       <div class="popup-brand">
         <span><Sparkles :size="17" /></span>
         <div>
-          <strong>Auto Questionnaire</strong>
+          <strong>一问成卷</strong>
           <small>AI 问卷辅助填写</small>
         </div>
       </div>

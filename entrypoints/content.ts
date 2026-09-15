@@ -15,7 +15,7 @@ export default defineContentScript({
     if (!settings.floatingEnabled || !settings.scanAllPages) return;
 
     const ui = await createShadowRootUi(ctx, {
-      name: 'auto-questionnaire-ui',
+      name: 'formsight-ui', // 使用英文内部标识避免宿主节点命名混乱
       position: 'inline',
       anchor: 'body',
       /**

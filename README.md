@@ -1,6 +1,6 @@
-# Auto Questionnaire
+# 一问成卷 | FormSight
 
-Auto Questionnaire 是一个基于 Vue 3 和 WXT 的浏览器扩展，用 AI 识别网页问卷、通过自然语言对话补全答案，并在用户审核后填写到当前页面。
+一问成卷（FormSight）是一个基于 Vue 3 和 WXT 的浏览器扩展，用 AI 识别网页问卷、通过自然语言对话补全答案，并在用户审核后填写到当前页面。
 
 项目采用无后端设计：AI 请求直接发送到用户配置的 OpenAI 兼容接口，API Key 和当前问卷会话保存在浏览器本地。
 
