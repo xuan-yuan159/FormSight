@@ -18,8 +18,10 @@ function mergeSettings(value?: Partial<UserSettings>): UserSettings {
     floatingEnabled: typeof value?.floatingEnabled === 'boolean' ? value.floatingEnabled : DEFAULT_SETTINGS.floatingEnabled, // 统一浮窗开关类型
     scanAllPages: typeof value?.scanAllPages === 'boolean' ? value.scanAllPages : DEFAULT_SETTINGS.scanAllPages, // 统一扫描开关类型
     ai: {
-      ...DEFAULT_SETTINGS.ai,
-      ...(value?.ai ?? {}),
+      baseURL: value?.ai?.baseURL ?? DEFAULT_SETTINGS.ai.baseURL, // 只保留通用 AI 配置字段
+      model: value?.ai?.model ?? DEFAULT_SETTINGS.ai.model, // 只保留模型名称
+      apiKey: value?.ai?.apiKey ?? DEFAULT_SETTINGS.ai.apiKey, // 只保留用户密钥
+      timeout: value?.ai?.timeout ?? DEFAULT_SETTINGS.ai.timeout, // 保留后台请求超时配置
     },
   };
 }

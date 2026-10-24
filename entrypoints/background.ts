@@ -43,12 +43,7 @@ async function testAIConnection(config: AIConfig): Promise<AIConnectionTestRespo
   try {
     const normalized = normalizeAIConfig(config);
     const prompt = buildTestPrompt();
-    const text = await requestAI(
-      { ...normalized, temperature: 0, maxTokens: Math.min(normalized.maxTokens, 64) }, // 连接测试只请求很短的结果
-      prompt,
-      false,
-      undefined,
-    );
+    const text = await requestAI(normalized, prompt, false, undefined); // 连接测试使用统一请求参数
     if (!text.trim()) throw new Error('接口已响应，但模型没有返回文本。');
     return { ok: true, message: `连接成功：${text.slice(0, 120)}` };
   } catch (error) {
@@ -128,7 +123,7 @@ async function requestAI(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`AI 请求失败（${response.status}）：${errorText.slice(0, 220)}`);
+      throw new Error(formatAIRequestError(response.status, errorText)); // 将服务商标准错误转换为可读提示
     }
 
     if (!stream || !response.body) {
@@ -167,11 +162,10 @@ function buildChatRequestBody(
       { role: 'system', content: payload.systemPrompt },
       { role: 'user', content: payload.userPrompt },
     ],
-    max_tokens: Math.round(config.maxTokens), // 统一发送整数 Token 上限
     stream, // 按请求类型选择流式或普通响应
   };
 
-  // 不发送 temperature，兼容明确拒绝该参数的新模型并避免错误后重复重试
+  // 只发送 OpenAI 兼容接口的通用字段，避免服务商私有参数导致请求失败
   return body;
 }
 
@@ -197,6 +191,33 @@ function buildChatEndpoint(baseURL: string): string {
     endpoint.pathname = path;
   }
   return endpoint.toString();
+}
+
+/**
+ * 解析 OpenAI 兼容接口的 HTTP 错误并生成可操作的提示。
+ */
+function formatAIRequestError(status: number, errorText: string): string {
+  let message = errorText.trim();
+  try {
+    const data = JSON.parse(errorText) as unknown;
+    const error = data && typeof data === 'object' ? (data as Record<string, unknown>).error : undefined;
+    if (typeof error === 'string') {
+      message = error;
+    } else if (error && typeof error === 'object') {
+      const errorMessage = (error as Record<string, unknown>).message;
+      message = typeof errorMessage === 'string' ? errorMessage : JSON.stringify(error);
+    }
+  } catch {
+    // 非 JSON 错误保留服务商返回的文本
+  }
+
+  if (status === 429) {
+    return `AI 服务暂时不可用（429）：${message || '当前模型暂时不可用，请稍后重试或更换模型。'}`;
+  }
+  if (status === 503) {
+    return `AI 服务上游不可用（503）：${message || '服务商暂时没有可用响应，请稍后重试。'}`;
+  }
+  return `AI 请求失败（${status}）：${message.slice(0, 220)}`;
 }
 
 /**

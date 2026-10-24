@@ -51,7 +51,7 @@ pnpm zip
 
 Base URL 填写服务商的 API 根地址，例如 `https://api.example.com/v1`；扩展会自动请求 `/chat/completions`。Model 填写服务商实际提供的模型名称。
 
-为了兼容不支持 `temperature` 的新模型，扩展请求体不会发送 `temperature` 参数。结构化输出仍由提示词和本地 Zod 校验共同约束。
+扩展请求体只发送通用的 `model`、`messages` 和 `stream` 字段；结构化输出由提示词和本地 Zod 校验共同约束。
 
 ## 隐私和权限
 

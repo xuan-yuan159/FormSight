@@ -227,18 +227,12 @@ export function createRequestId(prefix = 'aq-request'): string {
  * 保留 AI 配置中需要发送给后台的安全字段。
  */
 export function normalizeAIConfig(config?: Partial<AIConfig>): AIConfig {
-  const temperature = Number(config?.temperature);
   const timeout = Number(config?.timeout);
-  const maxTokens = Number(config?.maxTokens);
 
   return {
-    ...DEFAULT_AI_CONFIG,
-    ...config,
     baseURL: String(config?.baseURL ?? '').trim().replace(/\/+$/, ''), // 删除末尾斜杠，避免拼接重复
     model: String(config?.model ?? '').trim(), // 删除模型名首尾空白
     apiKey: String(config?.apiKey ?? '').trim(), // 删除 API Key 首尾空白
-    temperature: Number.isFinite(temperature) ? Math.min(Math.max(temperature, 0), 2) : DEFAULT_AI_CONFIG.temperature, // 修复空输入和非法数字
     timeout: Number.isFinite(timeout) ? Math.min(Math.max(timeout, 5000), 300000) : DEFAULT_AI_CONFIG.timeout, // 限制请求超时范围
-    maxTokens: Number.isFinite(maxTokens) ? Math.min(Math.max(Math.round(maxTokens), 256), 32000) : DEFAULT_AI_CONFIG.maxTokens, // 限制输出长度范围
   };
 }

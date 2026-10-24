@@ -131,15 +131,6 @@ onMounted(loadSettings);
             <input v-model="settings.ai.apiKey" type="password" placeholder="输入你的 API Key" autocomplete="off" />
           </label>
 
-          <label class="form-field">
-            <span>Temperature</span>
-            <input v-model.number="settings.ai.temperature" type="number" min="0" max="1" step="0.1" />
-          </label>
-
-          <label class="form-field">
-            <span>最大输出 Token</span>
-            <input v-model.number="settings.ai.maxTokens" type="number" min="1000" max="32000" step="500" />
-          </label>
         </div>
 
         <div class="action-row">

@@ -27,9 +27,13 @@ const CONTROL_SELECTOR = [
   'input:not([type="hidden"]):not([type="password"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"])',
   'textarea',
   'select',
-  '[contenteditable="true"]',
+  '[contenteditable]:not([contenteditable="false"])',
+  'label:has(input[type="radio"]), label:has(input[type="checkbox"])',
   '[role="radio"]',
   '[role="checkbox"]',
+  '[role="switch"]',
+  '[role="slider"]',
+  '[aria-checked="true"], [aria-checked="false"]',
   '[role="combobox"]',
   '[role="textbox"]',
   '[aria-haspopup="listbox"]',
@@ -95,11 +99,27 @@ function getNativeChoice(element: HTMLElement): HTMLInputElement | null {
 }
 
 /**
+ * 判断节点是否为实际可编辑的富文本或自定义文本框，排除显式禁用编辑的节点。
+ */
+function isEditableContentElement(element: HTMLElement): boolean {
+  const contentEditable = element.getAttribute('contenteditable')?.toLocaleLowerCase();
+  if (contentEditable === 'false') return false;
+
+  return Boolean(
+    element.isContentEditable ||
+      contentEditable === '' ||
+      contentEditable === 'true' ||
+      contentEditable === 'plaintext-only' ||
+      (element.getAttribute('role') === 'textbox' && !('value' in element)),
+  );
+}
+
+/**
  * 获取自定义单选或复选节点的实际外层容器。
  */
 function getChoiceRoot(element: HTMLElement): HTMLElement {
   const root = element.closest<HTMLElement>(
-    '[role="radio"], [role="checkbox"], label, .ws-radio, .ws-checkbox, .option-box, .radio-item, .checkbox-item',
+    '[role="radio"], [role="checkbox"], [role="switch"], [aria-checked], label, .ws-radio, .ws-checkbox, .option-box, .radio-item, .checkbox-item',
   );
   return root ?? element;
 }
@@ -111,10 +131,16 @@ function getChoiceType(element: HTMLElement): 'single' | 'multiple' | null {
   const role = element.getAttribute('role');
   if (role === 'radio') return 'single';
   if (role === 'checkbox') return 'multiple';
+  if (role === 'switch') return 'multiple';
 
   const nativeChoice = getNativeChoice(element);
   if (nativeChoice?.type === 'radio') return 'single';
   if (nativeChoice?.type === 'checkbox') return 'multiple';
+
+  if (element.hasAttribute('aria-checked')) {
+    const marker = `${element.className} ${element.getAttribute('data-type') ?? ''}`.toLocaleLowerCase();
+    return /checkbox|check|multiple|多选/.test(marker) ? 'multiple' : 'single';
+  }
   return null;
 }
 
@@ -287,8 +313,9 @@ function getFieldType(element: HTMLElement): FieldType {
   const role = element.getAttribute('role');
   if (role === 'radio') return 'single';
   if (role === 'checkbox') return 'multiple';
+  if (role === 'slider' || element.hasAttribute('aria-valuenow')) return 'number';
   if (role === 'combobox' || element.getAttribute('aria-haspopup') === 'listbox') return 'select';
-  if (element.isContentEditable || (role === 'textbox' && !('value' in element))) return 'contenteditable';
+  if (isEditableContentElement(element)) return 'contenteditable';
   if (element.tagName === 'TEXTAREA') return 'textarea';
   if (element.tagName === 'SELECT') return 'select';
 
@@ -316,7 +343,7 @@ function getFieldType(element: HTMLElement): FieldType {
  * 读取控件当前值。
  */
 function getCurrentValue(element: HTMLElement): string {
-  if (element.isContentEditable) return element.textContent?.trim() ?? '';
+  if (isEditableContentElement(element)) return element.innerText?.trim() || element.textContent?.trim() || '';
   if (element instanceof HTMLSelectElement) {
     return Array.from(element.selectedOptions)
       .map((option) => cleanText(option.textContent ?? option.value))
@@ -325,8 +352,22 @@ function getCurrentValue(element: HTMLElement): string {
   if (element instanceof HTMLInputElement && ['radio', 'checkbox'].includes(element.type)) {
     return element.checked ? 'true' : 'false';
   }
+  if (element.getAttribute('role') === 'slider' || element.hasAttribute('aria-valuenow')) {
+    return element.getAttribute('aria-valuenow') ?? element.getAttribute('aria-valuetext') ?? '';
+  }
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) return element.value ?? '';
   return element.getAttribute('aria-valuetext') ?? element.textContent?.trim() ?? '';
+}
+
+/**
+ * 读取原生或 ARIA 滑块的数值范围，帮助 AI 生成可回填的数字答案。
+ */
+function getNumericConstraintText(element: HTMLElement): string {
+  const min = element.getAttribute('aria-valuemin') ?? (element instanceof HTMLInputElement ? element.min : '');
+  const max = element.getAttribute('aria-valuemax') ?? (element instanceof HTMLInputElement ? element.max : '');
+  const step = element instanceof HTMLInputElement ? element.step : '';
+  const parts = [min && max ? `范围：${min}-${max}` : '', step && step !== 'any' ? `步进：${step}` : ''].filter(Boolean);
+  return parts.join('，');
 }
 
 /**
@@ -397,7 +438,9 @@ function collectCandidates(documentRef: Document): ScanCandidate[] {
     const role = element.getAttribute('role');
     const isNativeControl = /^(INPUT|TEXTAREA|SELECT)$/.test(element.tagName);
     const customParent = isNativeControl
-      ? element.closest<HTMLElement>('[role="radio"], [role="checkbox"]')
+      ? element.closest<HTMLElement>(
+          '[role="radio"], [role="checkbox"], [role="switch"], label:has(input[type="radio"]), label:has(input[type="checkbox"])',
+        )
       : null;
 
     if (customParent && customParent !== element) continue; // 自定义控件已有外层语义节点，避免重复扫描
@@ -463,9 +506,10 @@ function buildSimpleField(
   const type = getFieldType(element);
   const label = getQuestionLabel(element, container, documentRef) || `未命名字段 ${fieldIndex + 1}`;
   const runtimeOptions = type === 'select' ? getSelectOptions(element) : [];
+  const numericConstraint = type === 'number' ? getNumericConstraintText(element) : '';
   const description = runtimeOptions.length > 0
     ? `${label}；选项：${runtimeOptions.map((option) => option.label).join('、')}`
-    : cleanText(`${label} ${getElementText(container)}`, 300);
+    : cleanText(`${label} ${numericConstraint} ${getElementText(container)}`, 300);
   const fieldId = makeFieldId(element, fieldIndex);
 
   return {
@@ -767,15 +811,55 @@ function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: s
  * 设置自定义文本框或 contenteditable 节点的值。
  */
 function setCustomTextValue(element: HTMLElement, value: string): void {
-  if (element.isContentEditable) {
-    element.textContent = value; // 填写可编辑区域
-    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value })); // 触发编辑事件
+  if (isEditableContentElement(element)) {
+    const ownerDocument = element.ownerDocument;
+    let inserted = false;
+    element.focus(); // 让富文本编辑器接收标准编辑事件
+    try {
+      const selection = ownerDocument.getSelection();
+      const range = ownerDocument.createRange();
+      range.selectNodeContents(element);
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      inserted = ownerDocument.execCommand('insertText', false, value); // 优先使用浏览器编辑命令同步编辑器内部状态
+    } catch {
+      inserted = false;
+    }
+    if (!inserted) element.textContent = value; // 不支持编辑命令的编辑器回退到文本赋值
+    element.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText', data: value })); // 触发富文本编辑器输入事件
+    element.dispatchEvent(new Event('change', { bubbles: true })); // 通知页面字段已变更
+    element.dispatchEvent(new Event('blur', { bubbles: true })); // 触发部分编辑器的失焦保存逻辑
     return;
   }
 
   element.textContent = value; // 兼容没有原生 value 属性的 ARIA 文本框
   element.dispatchEvent(new Event('input', { bubbles: true })); // 通知自定义文本框输入变化
   element.dispatchEvent(new Event('change', { bubbles: true })); // 通知自定义文本框字段已变更
+}
+
+/**
+ * 设置原生或 ARIA 滑块的数值并触发页面状态同步事件。
+ */
+function setSliderValue(element: HTMLElement, value: string): boolean {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return false;
+
+  if (element instanceof HTMLInputElement && element.type === 'range') {
+    setInputValue(element, String(numericValue)); // 原生滑块通过 value setter 兼容框架监听
+    return true;
+  }
+
+  const min = Number(element.getAttribute('aria-valuemin'));
+  const max = Number(element.getAttribute('aria-valuemax'));
+  const boundedValue = Number.isFinite(min) && Number.isFinite(max)
+    ? Math.min(Math.max(numericValue, min), max)
+    : numericValue; // 自定义滑块按页面声明的范围限制答案
+  element.focus(); // 让自定义滑块获得交互焦点
+  element.setAttribute('aria-valuenow', String(boundedValue)); // 更新无原生 value 的滑块当前值
+  element.setAttribute('aria-valuetext', String(boundedValue)); // 同步辅助技术读取的文本值
+  element.dispatchEvent(new Event('input', { bubbles: true })); // 通知页面输入状态变化
+  element.dispatchEvent(new Event('change', { bubbles: true })); // 通知页面字段已变更
+  return true;
 }
 
 /**
@@ -838,13 +922,22 @@ export function applyAnswers(
       continue;
     }
 
+    if (field.type === 'number' && (element.getAttribute('role') === 'slider' || element.hasAttribute('aria-valuenow'))) {
+      if (setSliderValue(element, answerText)) {
+        filled += 1; // 自定义滑块按题目计数
+        continue;
+      }
+      skipped.push(field.label); // 滑块答案无法转换为数字时保留人工处理
+      continue;
+    }
+
     if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
       setInputValue(element, answerText);
       filled += 1;
       continue;
     }
 
-    if (element.isContentEditable || element.getAttribute('role') === 'textbox') {
+    if (isEditableContentElement(element)) {
       setCustomTextValue(element, answerText);
       filled += 1;
       continue;

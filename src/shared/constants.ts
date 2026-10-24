@@ -8,9 +8,7 @@ export const DEFAULT_AI_CONFIG: AIConfig = {
   baseURL: 'https://api.deepseek.com/v1', // 默认使用 OpenAI 兼容接口地址
   model: 'deepseek-chat', // 默认模型名称
   apiKey: '', // API Key 由用户自行填写
-  temperature: 0.2, // 低随机性有利于结构化输出
   timeout: 60000, // 单次请求超时时间
-  maxTokens: 8000, // 单次请求最大输出长度
 };
 
 export const DEFAULT_SETTINGS: UserSettings = {

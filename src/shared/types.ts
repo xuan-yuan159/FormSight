@@ -17,9 +17,7 @@ export interface AIConfig {
   baseURL: string;
   model: string;
   apiKey: string;
-  temperature: number;
   timeout: number;
-  maxTokens: number;
 }
 
 export interface UserSettings {
