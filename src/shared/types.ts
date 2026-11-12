@@ -1,4 +1,4 @@
-export type InquiryMode = 'casual' | 'normal' | 'serious';
+export type InquiryMode = 'casual' | 'normal' | 'serious' | 'conversation'; // 支持仅依据用户描述推断填写
 
 export type FieldType =
   | 'text'

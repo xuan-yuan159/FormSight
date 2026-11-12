@@ -19,21 +19,30 @@ export default defineBackground(() => {
 /**
  * 处理扩展内部消息。
  */
-async function handleRuntimeMessage(
+function handleRuntimeMessage(
   message: AIStreamRequest | AIConnectionTestRequest,
   sender: MessageSender,
-): Promise<{ ok: boolean; message?: string } | AIConnectionTestResponse> {
+  sendResponse: (response: { ok: boolean; message?: string } | AIConnectionTestResponse) => void,
+): boolean | void {
   if (message?.type === 'AQ_AI_STREAM_REQUEST') {
-    if (!sender.tab?.id) return { ok: false, message: '当前请求没有关联网页标签页。' };
-    void streamAIResponse(message, sender.tab.id); // 流式任务在后台继续运行
-    return { ok: true, message: 'AI 请求已开始。' };
+    if (!sender.tab?.id) {
+      sendResponse({ ok: false, message: '当前请求没有关联网页标签页。' }); // 缺少标签页时立即结束请求
+      return;
+    }
+
+    void streamAIResponse(message, sender.tab.id).then(
+      () => sendResponse({ ok: true, message: 'AI 请求已完成。' }), // 完成流式处理后关闭消息通道
+      (error: unknown) => sendResponse({ ok: false, message: getErrorMessage(error) }), // 未预期异常也要通知前端
+    );
+    return true; // 保持消息通道打开，避免后台 Service Worker 提前休眠
   }
 
   if (message?.type === 'AQ_AI_TEST_REQUEST') {
-    return testAIConnection(message.config);
+    void testAIConnection(message.config).then(sendResponse); // 使用 sendResponse 兼容不支持 Promise 监听器的浏览器
+    return true; // 异步连接测试期间保持消息通道
   }
 
-  return { ok: false, message: '不支持的消息类型。' };
+  sendResponse({ ok: false, message: '不支持的消息类型。' }); // 对未知消息返回明确结果
 }
 
 /**

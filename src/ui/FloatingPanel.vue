@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
   Check,
   CircleAlert,
@@ -56,7 +56,41 @@ const modeOptions: Array<{ value: InquiryMode; label: string; description: strin
   { value: 'casual', label: '敷衍', description: '不询问，直接生成合理答案' }, // 敷衍模式一次性完成
   { value: 'normal', label: '正常', description: '对关键歧义对话确认，其余推断' }, // 正常模式平衡确认和推断
   { value: 'serious', label: '认真', description: '关键歧义不限轮次对话' }, // 认真模式不限制总轮次
+  { value: 'conversation', label: '基于对话', description: '描述情况后结合问卷推断填写' }, // 新模式只收集一次描述，不主动追问
 ];
+
+/**
+ * 切换询问模式时初始化对应的输入和结果状态。
+ */
+watch(mode, (selectedMode, previousMode) => {
+  if (selectedMode === 'conversation') {
+    analysis.value = null;
+    finalAnswers.value = [];
+    fields.value = [];
+    pageContext.value = '';
+    chatInput.value = '';
+    conversation.value = [{
+      role: 'assistant',
+      content: '请直接描述你的情况、经历或偏好；提交后我会结合当前问卷内容，为未提及的题目做相关推断并生成完整答案。', // 先展示输入引导，不要求用户扫描页面
+    }];
+    currentRequestId.value = ''; // 切换模式后忽略其他模式尚未完成的响应
+    currentPhase.value = null;
+    stage.value = 'waiting';
+    message.value = '请描述你的情况，提交后将自动识别当前问卷';
+    return;
+  }
+
+  if (previousMode === 'conversation') {
+    conversation.value = [];
+    chatInput.value = ''; // 切换回其他模式时清除尚未提交的描述
+    analysis.value = null;
+    finalAnswers.value = [];
+    fields.value = [];
+    pageContext.value = '';
+    stage.value = 'idle';
+    message.value = '点击扫描当前页面';
+  }
+});
 
 const isBusy = computed(() => ['analyzing', 'completing'].includes(stage.value));
 const answerList = computed(() => finalAnswers.value.filter((answer) => hasAnswerValue(answer.value)));
@@ -404,7 +438,9 @@ function normalizeAnalysis(
       answerMap.set(answer.fieldId, answer); // 新答案有效时覆盖旧答案，避免空值冲掉上一轮结果
     }
   }
-  const conversationAnswers = buildConversationInferredAnswers(scannedFields, conversation);
+  const conversationAnswers = selectedMode === 'conversation'
+    ? []
+    : buildConversationInferredAnswers(scannedFields, conversation); // 基于对话模式由 AI 按完整语义处理否定和上下文
   for (const answer of conversationAnswers) {
     answerMap.set(answer.fieldId, answer); // 用户明确表达优先于模型上一轮推断
   }
@@ -577,6 +613,7 @@ function limitConversationQuestions(questions: DecisionQuestion[], selectedMode:
     casual: 0,
     normal: 3,
     serious: 3,
+    conversation: 0, // 基于对话模式始终直接生成答案
   };
   return questions.slice(0, limits[selectedMode]); // 每轮最多合并三个问题，避免一次输出长段落
 }
@@ -605,7 +642,12 @@ function handleStreamMessage(incoming: unknown): void {
   }
 
   if (event.type === 'error') {
-    stage.value = 'error';
+    if (mode.value === 'conversation') {
+      stage.value = 'waiting';
+      chatInput.value = [...conversation.value].reverse().find((item) => item.role === 'user')?.content ?? ''; // 请求失败后恢复首轮描述
+    } else {
+      stage.value = 'error';
+    }
     message.value = event.message ?? 'AI 请求失败';
     return;
   }
@@ -633,14 +675,21 @@ async function handleAICompleted(phase: 'analyze' | 'complete', text: string): P
     if (phase === 'analyze') {
       analysis.value = result;
       finalAnswers.value = result.resolvedAnswers;
-      const shouldOpenConversation = mode.value !== 'casual';
-      conversation.value = shouldOpenConversation
-        ? [{ role: 'assistant', content: buildConversationOpening(result.questions) }]
-        : [];
+      const shouldOpenConversation = mode.value === 'normal' || mode.value === 'serious';
+      conversation.value = mode.value === 'conversation'
+        ? [
+            ...conversation.value,
+            { role: 'assistant', content: '已根据你的描述和问卷内容生成答案；未提及的信息已作相关推断，请检查示例个人信息。' }, // 保留用户描述并说明推断结果
+          ]
+        : shouldOpenConversation
+          ? [{ role: 'assistant', content: buildConversationOpening(result.questions) }]
+          : [];
       chatInput.value = '';
-      conversationRound.value = shouldOpenConversation ? 1 : 0; // 非敷衍模式允许用户补充自然语言上下文
+      conversationRound.value = shouldOpenConversation ? 1 : 0; // 仅正常和认真模式进入追问
       stage.value = shouldOpenConversation ? 'waiting' : 'ready';
-      message.value = shouldOpenConversation ? '请在对话中补充关键信息，也可以直接应用初步答案' : 'AI 已生成整份答案，请检查后应用';
+      message.value = shouldOpenConversation
+        ? '请在对话中补充关键信息，也可以直接应用初步答案'
+        : mode.value === 'conversation' ? '已结合描述生成整份答案，请检查后应用' : 'AI 已生成整份答案，请检查后应用'; // 基于对话模式提交后直接完成
     } else {
       analysis.value = {
         ...(analysis.value ?? { summary: '', fieldSummaries: [], resolvedAnswers: [], questions: [], warnings: [] }),
@@ -669,7 +718,12 @@ async function handleAICompleted(phase: 'analyze' | 'complete', text: string): P
     }
     await persistSession(stage.value === 'ready' ? 'ready_to_fill' : 'waiting_for_user');
   } catch {
-    stage.value = 'error';
+    if (mode.value === 'conversation') {
+      stage.value = 'waiting';
+      chatInput.value = [...conversation.value].reverse().find((item) => item.role === 'user')?.content ?? ''; // 输出无法解析时允许保留描述重试
+    } else {
+      stage.value = 'error';
+    }
     message.value = 'AI 返回格式无法识别，请重试或检查模型配置';
   }
 }
@@ -713,11 +767,11 @@ function waitForScanResult(): Promise<ReturnType<typeof scanQuestionnaire>> {
 /**
  * 扫描当前网页中的待填写字段。
  */
-async function scanPage(): Promise<void> {
+async function scanPage(preserveConversation = false): Promise<void> {
   streamText.value = '';
   analysis.value = null;
   finalAnswers.value = [];
-  conversation.value = [];
+  if (!preserveConversation) conversation.value = []; // 基于对话模式在运行时扫描时保留用户描述
   chatInput.value = '';
   pageContext.value = '';
   showFieldDetails.value = false;
@@ -739,10 +793,12 @@ async function scanPage(): Promise<void> {
     return;
   }
 
-  stage.value = 'scanned';
-  message.value = result.fields.length > 0
-    ? `发现 ${result.fields.length} 个候选字段，可以开始 AI 识别`
-    : '未识别到标准控件，将交给 AI 从页面内容归纳字段'; // 复杂网页先交给 AI 识别页面上下文
+  stage.value = preserveConversation ? 'completing' : 'scanned'; // 提交描述后的自动扫描期间保持输入控件锁定
+  message.value = preserveConversation
+    ? '正在根据描述和问卷内容生成答案'
+    : result.fields.length > 0
+      ? `发现 ${result.fields.length} 个候选字段，可以开始 AI 识别`
+      : '未识别到标准控件，将交给 AI 从页面内容归纳字段'; // 复杂网页先交给 AI 识别页面上下文
   await persistSession('scanned', result);
 }
 
@@ -750,6 +806,7 @@ async function scanPage(): Promise<void> {
  * 调用 AI 识别当前问卷并生成追问。
  */
 async function analyzePage(): Promise<void> {
+  if (mode.value === 'conversation') return; // 基于对话模式直接显示输入，不运行扫描流程
   await scanPage(); // 每次识别前都重扫，兼容问卷翻页和动态更新
   if (fields.value.length === 0 && !pageContext.value.trim()) return;
 
@@ -790,45 +847,79 @@ async function analyzePage(): Promise<void> {
  * 将用户的一段自然语言回复发送给 AI 并统一补全问卷答案。
  */
 async function sendConversationMessage(): Promise<void> {
-  if (!analysis.value) return;
+  const isInitialConversationAnalysis = mode.value === 'conversation' && !analysis.value;
+  if (!analysis.value && !isInitialConversationAnalysis) return;
   const content = chatInput.value.trim();
   if (!content || stage.value !== 'waiting') return;
 
-  conversation.value.push({ role: 'user', content }); // 将用户的自然语言回复加入对话上下文
   chatInput.value = '';
   try {
+    if (isInitialConversationAnalysis) {
+      conversation.value = [{ role: 'user', content }]; // 每次重试都仅保留本次完整描述
+      stage.value = 'completing';
+      message.value = '正在读取当前问卷内容';
+      await scanPage(true); // 仅在用户提交描述后扫描，扫描时保留用户输入
+      if (stage.value === 'error' || (fields.value.length === 0 && !pageContext.value.trim())) {
+        conversation.value.push({
+          role: 'assistant',
+          content: '暂时无法读取当前页面的问卷内容。请确认已打开问卷页面后重试。', // 页面读取失败时保留描述并给出恢复方法
+        });
+        chatInput.value = content; // 保留输入，便于修复页面状态后直接重试
+        stage.value = 'waiting';
+        message.value = '问卷未能读取，描述已保留，请重试';
+        return;
+      }
+    } else {
+      conversation.value.push({ role: 'user', content }); // 将后续自然语言回复加入对话上下文
+    }
+
     const settings = await getSettings();
     if (!settings.ai.apiKey || !settings.ai.baseURL || !settings.ai.model) {
       throw new Error('请先打开设置填写 AI 配置。');
     }
 
-    const prompt = buildCompletionPrompt(
-      fields.value,
-      analysis.value.fieldSummaries, // 传递 AI 归纳字段，支持复杂页面继续对话
-      analysis.value.resolvedAnswers,
-      analysis.value.questions,
-      conversation.value,
-      mode.value,
-      conversationRound.value,
-      pageContext.value, // 传递页面上下文，避免 AI 只看到临时字段编号
-    );
+    const prompt = isInitialConversationAnalysis
+      ? buildAnalysisPrompt(
+          fields.value,
+          mode.value,
+          document.title,
+          window.location.href,
+          pageContext.value,
+          conversation.value, // 首轮用户描述与提交时扫描的字段共同进入分析请求
+        )
+      : buildCompletionPrompt(
+          fields.value,
+          analysis.value!.fieldSummaries, // 传递 AI 对复杂字段的语义归纳，支持复杂页面继续对话
+          analysis.value!.resolvedAnswers,
+          analysis.value!.questions,
+          conversation.value,
+          mode.value,
+          conversationRound.value,
+          pageContext.value, // 传递页面上下文，避免 AI 只看到临时字段编号
+        );
 
-    currentRequestId.value = createRequestId('complete');
-    currentPhase.value = 'complete';
+    const phase = isInitialConversationAnalysis ? 'analyze' : 'complete';
+    currentRequestId.value = createRequestId(phase);
+    currentPhase.value = phase;
     streamText.value = '';
     stage.value = 'completing';
-    message.value = 'AI 正在根据这段对话补全整份问卷';
+    message.value = 'AI 正在根据这段对话和问卷内容生成答案';
     await persistSession('analyzing');
 
     const response = (await browser.runtime.sendMessage({
       type: 'AQ_AI_STREAM_REQUEST',
       requestId: currentRequestId.value,
-      phase: 'complete',
+      phase,
       payload: prompt,
     })) as { ok?: boolean; message?: string } | undefined;
     if (response?.ok === false) throw new Error(response.message || '后台没有启动 AI 请求。');
   } catch (error) {
-    stage.value = 'error';
+    if (isInitialConversationAnalysis) {
+      chatInput.value = content; // 初次生成失败时保留用户描述，允许立即重试
+      stage.value = 'waiting';
+    } else {
+      stage.value = 'error';
+    }
     message.value = error instanceof Error ? error.message : 'AI 请求启动失败，请重新加载扩展。';
   }
 }
@@ -889,8 +980,8 @@ async function openOptions(): Promise<void> {
  * 清除当前页面的识别结果。
  */
 async function resetPanel(): Promise<void> {
-  stage.value = 'idle';
-  message.value = '点击扫描当前页面';
+  stage.value = mode.value === 'conversation' ? 'waiting' : 'idle';
+  message.value = mode.value === 'conversation' ? '请描述你的情况，提交后将自动识别当前问卷' : '点击扫描当前页面';
   streamText.value = '';
   currentRequestId.value = ''; // 清理旧请求，忽略其后续流式事件
   currentPhase.value = null;
@@ -898,7 +989,12 @@ async function resetPanel(): Promise<void> {
   pageContext.value = '';
   analysis.value = null;
   finalAnswers.value = [];
-  conversation.value = [];
+  conversation.value = mode.value === 'conversation'
+    ? [{
+        role: 'assistant',
+        content: '请直接描述你的情况、经历或偏好；提交后我会结合当前问卷内容，为未提及的题目做相关推断并生成完整答案。', // 清空后继续保留直接输入入口
+      }]
+    : [];
   chatInput.value = '';
   showFieldDetails.value = false;
   expandedFieldIds.value = {};
@@ -972,7 +1068,7 @@ onUnmounted(unbindStreamListener);
             </option>
           </select>
         </label>
-        <button class="aq-primary-button" type="button" :disabled="isBusy" @click="analyzePage">
+        <button v-if="mode !== 'conversation'" class="aq-primary-button" type="button" :disabled="isBusy" @click="analyzePage">
           <LoaderCircle v-if="isBusy" class="aq-spin" :size="15" />
           <ScanSearch v-else :size="15" />
           {{ fields.length > 0 ? '重新扫描并识别' : '扫描并识别' }}
@@ -1037,7 +1133,7 @@ onUnmounted(unbindStreamListener);
 
       <div v-if="conversation.length > 0" class="aq-section aq-conversation-section">
         <div class="aq-section-heading">
-          <span>AI 询问</span>
+          <span>{{ mode === 'conversation' ? '填写描述' : 'AI 询问' }}</span>
           <em>{{ stage === 'waiting' ? '等待回复' : `${conversation.length} 条消息` }}</em>
         </div>
         <div class="aq-chat-list">
@@ -1050,12 +1146,12 @@ onUnmounted(unbindStreamListener);
           <textarea
             v-model="chatInput"
             rows="3"
-            placeholder="直接描述你的情况或偏好；没有提到的内容会自动合理补全。"
+            :placeholder="mode === 'conversation' ? '描述你的实际情况、经历、偏好或填写意图...' : '直接描述你的情况或偏好；没有提到的内容会自动合理补全。'"
             @keydown.enter.exact.prevent="sendConversationMessage"
           ></textarea>
           <button class="aq-secondary-button" type="button" :disabled="isBusy || !chatInput.trim()" @click="sendConversationMessage">
             <Send :size="15" />
-            发送并生成答案
+            {{ mode === 'conversation' ? '生成整份答案' : '发送并生成答案' }}
           </button>
         </div>
       </div>

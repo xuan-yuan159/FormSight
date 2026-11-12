@@ -14,7 +14,7 @@ const testing = ref(false);
 const saved = ref(false);
 const brandIconUrl = browser.runtime.getURL('icons/icon-48.png'); // 使用扩展资源中的品牌图标
 
-const modeOptions: InquiryMode[] = ['casual', 'normal', 'serious']; // 设置页只保留三种询问模式
+const modeOptions: InquiryMode[] = ['casual', 'normal', 'serious', 'conversation']; // 设置页展示全部询问模式
 
 /**
  * 加载本地扩展配置。

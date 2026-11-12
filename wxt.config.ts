@@ -13,7 +13,7 @@ export default defineConfig({
       256: 'icons/icon-256.png', // 保留高清品牌图标资源
     },
     description: '使用 AI 辅助识别和填写网页问卷，最终由用户人工审核。', // 扩展描述
-    version: '0.1.2', // 扩展版本
+    version: '0.1.3', // 扩展版本
     permissions: ['storage', 'tabs'], // 扩展基础权限
     host_permissions: ['http://*/*', 'https://*/*'], // 支持网页浮窗和 AI API 请求
     web_accessible_resources: [

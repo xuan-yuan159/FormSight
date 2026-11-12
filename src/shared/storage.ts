@@ -7,7 +7,7 @@ import type { QuestionnaireSession, UserSettings } from './types';
  */
 function mergeSettings(value?: Partial<UserSettings>): UserSettings {
   const candidateMode = value?.inquiryMode;
-  const inquiryMode = typeof candidateMode === 'string' && ['casual', 'normal', 'serious'].includes(candidateMode)
+  const inquiryMode = typeof candidateMode === 'string' && ['casual', 'normal', 'serious', 'conversation'].includes(candidateMode) // 兼容新增的基于对话模式
     ? candidateMode
     : DEFAULT_SETTINGS.inquiryMode;
 
